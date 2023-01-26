@@ -1,0 +1,11 @@
+{
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm --workspace bluos run build",
+    "start": "npm --workspace bluos run start",
+    "start:nodemon": "npm --workspace bluos run start:nodemon",
+    "start:typescript": "npm --workspace bluos run start:typescript"
+  }
+}

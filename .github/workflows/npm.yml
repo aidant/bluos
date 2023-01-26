@@ -1,0 +1,82 @@
+name: NPM
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  list-packages:
+    name: NPM List Packages
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.list-packages.outputs.packages }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v2
+        with:
+          node-version: '18'
+
+      - name: List Packages
+        id: list-packages
+        run: |
+          echo "::set-output name=packages::$(
+            npm ls --production --depth 1 --json 2> /dev/null |
+            jq '.problems | map(select(startswith("missing: ")) | .[9:] | split(", required by ") | .[0] | split("@file:")) | map(.[1])' |
+            node -p "JSON.stringify(JSON.parse(fs.readFileSync(0, 'utf-8')).map(directory => ({ ...require(directory + '/package.json'), directory })))" |
+            jq '. as $parent | map({ directory, name, version, private, workspaces: $parent | map({ (.name): .version }) | add })' |
+            node -p "JSON.stringify(JSON.parse(fs.readFileSync(0, 'utf-8')))"
+          )"
+
+  publish:
+    name: NPM Publish ${{ matrix.package.name }}
+    runs-on: ubuntu-latest
+    needs: list-packages
+    strategy:
+      matrix:
+        package: ${{ fromJSON(needs.list-packages.outputs.packages) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v2
+        with:
+          node-version: '18'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+        working-directory: ${{ matrix.package.directory }}
+
+      - name: Configure NPM Credentials
+        if: ${{ matrix.package.private == false }}
+        run: npm set //registry.npmjs.org/:_authToken $NPM_TOKEN
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: NPM Pre-Publish Checks
+        if: ${{ matrix.package.private == false }}
+        run: node -p "'IS_PUBLISHED=' + $(npm view ${{ matrix.package.name }} versions --json 2>/dev/null || echo "[]").includes('${{ matrix.package.version }}')" >> $GITHUB_ENV
+        working-directory: ${{ matrix.package.directory }}
+
+      - name: NPM Pre-Publish Prepare Package
+        if: ${{ matrix.package.private == false && env.IS_PUBLISHED == 'false' }}
+        run: node -e "workspaces = JSON.parse(process.env.WORKSPACES); fs.writeFileSync('./package.json', fs.readFileSync('./package.json', 'utf-8').replace(new RegExp('\"(' + Object.keys(workspaces).join('|') + ')\":(\\\\s?)\"\\\\*\"', 'g'), (_, \$1, \$2) => '\"' + \$1 + '\":' + \$2 + '\"^' + workspaces[\$1] + '\"'))"
+        working-directory: ${{ matrix.package.directory }}
+        env:
+          WORKSPACES: ${{ toJSON(matrix.package.workspaces) }}
+
+      - name: NPM Publish
+        if: ${{ matrix.package.private == false && env.IS_PUBLISHED == 'false' }}
+        run: npm --workspace=${{ matrix.package.name }} publish --access=public
+        working-directory: ${{ matrix.package.directory }}
