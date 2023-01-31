@@ -18,20 +18,20 @@ export const observeVolume = () => volume$
 
 export const mute = async ({ muted = true } = {}) => {
   log('mute({ muted: %s })', muted)
-  await bluOS.get('/Volume', { params: { mute: muted ? 1 : 0 } })
+  await bluOS('/Volume', { params: { mute: muted ? '1' : '0' } })
 }
 
 export const setVolume = async (volume: number) => {
   log('setVolume(%s)', volume)
-  await bluOS.get('/Volume', { params: { level: volume * 100 } })
+  await bluOS('/Volume', { params: { level: `${volume * 100}` } })
 }
 
 export const increaseVolume = async (decibels = 0.8) => {
   log('increaseVolume(%s)', decibels)
-  await bluOS.get('/Volume', { params: { db: `${decibels}dB` } })
+  await bluOS('/Volume', { params: { db: `${decibels}dB` } })
 }
 
 export const decreaseVolume = async (decibels = -0.8) => {
   log('decreaseVolume(%s)', decibels)
-  await bluOS.get('/Volume', { params: { db: `${decibels}dB` } })
+  await bluOS('/Volume', { params: { db: `${decibels}dB` } })
 }

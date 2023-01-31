@@ -1,11 +1,9 @@
-import axios, { AxiosError } from 'axios'
-import { webcrypto as crypto } from 'crypto'
 import { XMLParser } from 'fast-xml-parser'
 import { firstValueFrom } from 'rxjs'
-import { observeBaseURL, queryBaseURL } from './bluos-base-url.js'
+import { observeDeviceEndpoint } from './bluos-discovery.js'
 import { logger } from './log.js'
 
-const log = logger('bluos')
+const log = logger('bluos-api')
 const verbose = log.extend('verbose', ':')
 
 const xml = new XMLParser({
@@ -14,32 +12,36 @@ const xml = new XMLParser({
   attributeNamePrefix: '',
 })
 
-export const bluOS = axios.create({ transitional: { clarifyTimeoutError: true } })
+interface BluOSOptions {
+  params?: Record<string, string>
+  endpoint?: string
+  signal?: AbortSignal
+}
 
-bluOS.interceptors.request.use(async (config) => {
-  config.baseURL ??= await firstValueFrom(observeBaseURL())
-  config.headers['x-request-id'] = crypto.randomUUID()
+export const bluOS = async (path: string, { params, endpoint, signal }: BluOSOptions = {}) => {
+  endpoint ??= await firstValueFrom(observeDeviceEndpoint())
 
-  verbose('request: %O', config)
+  const url = new URL(path, endpoint)
 
-  return config
-})
-
-bluOS.interceptors.response.use(
-  async (response) => {
-    if (response.headers['content-type'].startsWith('text/xml')) {
-      response.data = xml.parse(response.data)
-    }
-
-    verbose('response: %O', response)
-
-    return response
-  },
-  async (error) => {
-    if (error instanceof AxiosError && ['ENETUNREACH', 'ETIMEDOUT'].includes(error.code!)) {
-      queryBaseURL()
-    }
-
-    throw error
+  if (params) {
+    url.search = new URLSearchParams(params).toString()
   }
-)
+
+  verbose('url: %s', url)
+
+  const response = await fetch(url.href, { signal })
+
+  if (!response.ok) {
+    throw new Error(`${response.status} ${response.statusText}`)
+  }
+
+  const contentType = response.headers.get('content-type')
+
+  const data = await response.text()
+
+  if (contentType?.startsWith('text/xml')) {
+    return xml.parse(data)
+  }
+
+  throw new Error(`Unsupported content type: "${contentType}"`)
+}

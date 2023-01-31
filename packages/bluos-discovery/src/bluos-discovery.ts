@@ -1,10 +1,13 @@
 import type { SrvAnswer, StringAnswer } from 'dns-packet'
-import mDNS, { type QueryOutgoingPacket, type ResponsePacket } from 'multicast-dns'
+import mDNS, { type QueryOutgoingPacket } from 'multicast-dns'
 import { distinctUntilChanged, Observable, shareReplay, tap } from 'rxjs'
 import { logger } from './log.js'
 
-const log = logger('base-url')
+const log = logger('discovery')
 const verbose = log.extend('verbose', ':')
+
+let interval: ReturnType<typeof setInterval>
+let multicast: mDNS.MulticastDNS | undefined
 
 const BLU_OS_MULTICAST_DNS_SERVICE_NAMES = [
   '_musc._tcp.local',
@@ -13,19 +16,40 @@ const BLU_OS_MULTICAST_DNS_SERVICE_NAMES = [
   '_musz._tcp.local',
 ]
 
-let multicast: mDNS.MulticastDNS | undefined
-
-const url$ = new Observable<string>((subscriber) => {
-  multicast ??= mDNS()
-
-  const interval = setInterval(queryBaseURL, 500)
-
-  const handleError = (error: Error) => {
-    log('error: %O', error)
-    subscriber.error(error)
+const query = () => {
+  const query: QueryOutgoingPacket = {
+    questions: BLU_OS_MULTICAST_DNS_SERVICE_NAMES.map((name) => ({
+      type: 'PTR',
+      name,
+      class: 'IN',
+    })),
   }
 
-  const handleResponse = (response: ResponsePacket) => {
+  log('query: %O', query)
+
+  multicast!.query(query)
+}
+
+export const startDiscovery = async () => {
+  multicast ??= mDNS()
+
+  interval ??= setInterval(query, 500)
+
+  queueMicrotask(query)
+}
+
+export const stopDiscovery = async () => {
+  clearInterval(interval)
+
+  multicast!.destroy()
+  multicast!.removeAllListeners()
+  multicast = undefined
+}
+
+const url$ = new Observable<string>((subscriber) => {
+  startDiscovery()
+
+  multicast!.on('response', (response) => {
     verbose('response: %O', response)
 
     const pointer = response.answers.find(
@@ -54,40 +78,20 @@ const url$ = new Observable<string>((subscriber) => {
     log('address: %O', address)
 
     clearInterval(interval)
+
     subscriber.next(`http://${address.data}:${service.data.port}/`)
-  }
+  })
 
-  multicast.on('response', handleResponse)
-  multicast.on('error', handleError)
+  multicast!.on('error', (error: Error) => {
+    log('error: %O', error)
+    subscriber.error(error)
+  })
 
-  queryBaseURL()
-
-  return () => {
-    clearInterval(interval)
-
-    multicast!.off('response', handleResponse)
-    multicast!.off('error', handleError)
-    multicast!.destroy()
-    multicast = undefined
-  }
+  return stopDiscovery
 }).pipe(
   distinctUntilChanged(),
-  tap((baseURL) => log('baseURL: %s', baseURL)),
+  tap((endpoint) => log('endpoint: %s', endpoint)),
   shareReplay({ bufferSize: 1, refCount: true })
 )
 
-export const queryBaseURL = () => {
-  const query: QueryOutgoingPacket = {
-    questions: BLU_OS_MULTICAST_DNS_SERVICE_NAMES.map((name) => ({
-      type: 'PTR',
-      name,
-      class: 'IN',
-    })),
-  }
-
-  log('query: %O', query)
-
-  multicast?.query(query)
-}
-
-export const observeBaseURL = () => url$
+export const observeDeviceEndpoint = () => url$

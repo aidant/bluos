@@ -1,4 +1,10 @@
-export { observeBaseURL, queryBaseURL } from './bluos-base-url.js'
+export {
+  configureDiscovery,
+  observeDeviceEndpoint,
+  startDiscovery,
+  stopDiscovery,
+  type Discovery,
+} from './bluos-discovery.js'
 export {
   next,
   observePlayback,

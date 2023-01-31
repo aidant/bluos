@@ -18,55 +18,55 @@ export const observePlayback = () => playback$
 
 export const play = async (seek?: number) => {
   log('play(%s)', seek || '')
-  await bluOS.get('/Play', { params: { seek } })
+  await bluOS('/Play', { params: { seek: `${seek}` } })
 }
 
 export const pause = async () => {
   log('pause()')
-  await bluOS.get('/Pause')
+  await bluOS('/Pause')
 }
 
 export const toggle = async () => {
   log('toggle()')
-  await bluOS.get('/Pause', { params: { toggle: 1 } })
+  await bluOS('/Pause', { params: { toggle: '1' } })
 }
 
 export const stop = async () => {
   log('stop()')
-  await bluOS.get('/Stop')
+  await bluOS('/Stop')
 }
 
 export const next = async () => {
   log('next()')
-  await bluOS.get('/Skip')
+  await bluOS('/Skip')
 }
 
 export const previous = async () => {
   log('previous()')
-  await bluOS.get('/Back')
+  await bluOS('/Back')
 }
 
 export const shuffle = async ({ off = false } = {}) => {
   log('shuffle({ off: %s })', off)
-  await bluOS.get('/Shuffle', { params: { state: off ? 0 : 1 } })
+  await bluOS('/Shuffle', { params: { state: off ? '0' : '1' } })
 }
 
 export const repeat = async (repeat: Repeat) => {
   log('repeat(%s)', repeat)
 
-  let state: number
+  let state: string
 
   switch (repeat) {
     case Repeat.All:
-      state = 0
+      state = '0'
       break
     case Repeat.One:
-      state = 1
+      state = '1'
       break
     case Repeat.Off:
-      state = 2
+      state = '2'
       break
   }
 
-  await bluOS.get('/Repeat', { params: { state } })
+  await bluOS('/Repeat', { params: { state } })
 }

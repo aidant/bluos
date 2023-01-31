@@ -1,4 +1,3 @@
-import { AxiosError, CanceledError } from 'axios'
 import _isEqual from 'lodash.isequal'
 import {
   combineLatest,
@@ -13,7 +12,7 @@ import {
 } from 'rxjs'
 import { z } from 'zod'
 import { bluOS } from './bluos-api.js'
-import { observeBaseURL } from './bluos-base-url.js'
+import { observeDeviceEndpoint } from './bluos-discovery.js'
 import { logger } from './log.js'
 
 const log = logger('status')
@@ -145,48 +144,40 @@ export interface Status {
   volume?: Volume
 }
 
-const bluOSStatus$ = observeBaseURL().pipe(
+const bluOSStatus$ = observeDeviceEndpoint().pipe(
   switchMap(
-    (baseURL) =>
+    (endpoint) =>
       new Observable<z.infer<typeof BluOSStatusSchema>['status']>((subscriber) => {
         let controller: AbortController
 
-        const getStatus = async (etag?: string, delay = 1000) => {
+        const getStatus = async (etag = '', delay = 1000) => {
           verbose('getStatus(%s, %s)', etag, delay)
 
           controller = new AbortController()
 
           try {
-            const response = await bluOS.get<string>('/Status', {
+            const response = await bluOS('/Status', {
               signal: controller.signal,
-              baseURL,
-              params: { etag, timeout: etag && 100 },
-              timeout: 110_000,
+              endpoint: endpoint,
+              params: { etag, timeout: etag && '100' },
             })
 
-            verbose('response: %O', response.data)
+            verbose('response: %O', response)
 
-            const { status } = BluOSStatusSchema.parse(response.data)
+            const { status } = BluOSStatusSchema.parse(response)
 
             subscriber.next(status)
 
             getStatus(status.etag)
           } catch (error) {
-            if (error instanceof AxiosError && error.code === 'ETIMEDOUT') {
-              verbose('error: %O', error)
-              getStatus()
-            } else if (error instanceof AxiosError && error.code === 'ENETUNREACH') {
+            if (!controller.signal.aborted) {
               log('error: %O', error)
-              subscriber.error(error)
-
-              await new Promise((resolve) => setTimeout(resolve, delay))
-
-              getStatus(undefined, Math.min(delay ** 1.1, 30_000))
-            } else if (!(error instanceof CanceledError) || !controller.signal.aborted) {
-              await new Promise((resolve) => setTimeout(resolve, delay))
-
-              getStatus(undefined, Math.min(delay ** 1.1, 30_000))
+              // subscriber.error(error)
             }
+
+            await new Promise((resolve) => setTimeout(resolve, delay))
+
+            getStatus(undefined, Math.min(delay ** 1.1, 30_000))
           }
         }
 
@@ -203,16 +194,16 @@ const bluOSStatus$ = observeBaseURL().pipe(
 )
 
 const bluOSSyncStatus$ = combineLatest({
-  baseURL: observeBaseURL(),
+  endpoint: observeDeviceEndpoint(),
   status: bluOSStatus$.pipe(
     map((status) => status.syncStat),
     distinctUntilChanged()
   ),
 }).pipe(
-  switchMap(async ({ baseURL, status }) => {
-    const response = await bluOS.get('/SyncStatus', { baseURL })
+  switchMap(async ({ endpoint, status }) => {
+    const response = await bluOS('/SyncStatus', { endpoint: endpoint })
 
-    const { SyncStatus } = BluOSSyncStatusSchema.parse(response.data)
+    const { SyncStatus } = BluOSSyncStatusSchema.parse(response)
 
     return SyncStatus
   }),
@@ -222,19 +213,19 @@ const bluOSSyncStatus$ = combineLatest({
 )
 
 const status$: Observable<Status> = combineLatest({
-  baseURL: observeBaseURL(),
+  endpoint: observeDeviceEndpoint(),
   status: bluOSStatus$,
   syncStatus: bluOSSyncStatus$,
 }).pipe(
-  switchMap(({ baseURL, status, syncStatus }) =>
+  switchMap(({ endpoint, status, syncStatus }) =>
     combineLatest({
-      baseURL: of(baseURL),
+      endpoint: of(endpoint),
       status: of(status),
       syncStatus: of(syncStatus),
-      seconds: timer(0, 1000),
+      milliseconds: timer(0, 10),
     })
   ),
-  map(({ baseURL, status, syncStatus, seconds }) => {
+  map(({ endpoint, status, syncStatus, milliseconds }) => {
     const parsed: Status = {}
 
     /*
@@ -258,7 +249,7 @@ const status$: Observable<Status> = combineLatest({
 
     if (syncStatus.icon) {
       parsed.device ??= {}
-      parsed.device.icon = new URL(syncStatus.icon, baseURL).href
+      parsed.device.icon = new URL(syncStatus.icon, endpoint).href
     }
 
     if (syncStatus.name) {
@@ -324,7 +315,7 @@ const status$: Observable<Status> = combineLatest({
 
     if (status.serviceIcon) {
       parsed.source ??= {}
-      parsed.source.icon = new URL(status.serviceIcon, baseURL).href
+      parsed.source.icon = new URL(status.serviceIcon, endpoint).href
     }
 
     if (status.service === 'Capture' && status.title1) {
@@ -334,7 +325,7 @@ const status$: Observable<Status> = combineLatest({
 
     if (status.service === 'Capture' && status.image) {
       parsed.source ??= {}
-      parsed.source.icon = new URL(status.image, baseURL).href
+      parsed.source.icon = new URL(status.image, endpoint).href
     }
 
     /*
@@ -386,7 +377,7 @@ const status$: Observable<Status> = combineLatest({
 
     if (status.service !== 'Capture' && status.image) {
       parsed.playback ??= {}
-      parsed.playback.image = new URL(status.image, baseURL).href
+      parsed.playback.image = new URL(status.image, endpoint).href
     }
 
     if (
@@ -395,7 +386,7 @@ const status$: Observable<Status> = combineLatest({
       typeof status.totlen === 'number'
     ) {
       parsed.playback ??= {}
-      parsed.playback.progress = Math.min((status.secs + seconds) / status.totlen, 1)
+      parsed.playback.progress = Math.min((status.secs + milliseconds / 100) / status.totlen, 1)
     } else if (typeof status.secs === 'number' && typeof status.totlen === 'number') {
       parsed.playback ??= {}
       parsed.playback.progress = 0

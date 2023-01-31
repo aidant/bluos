@@ -4,7 +4,7 @@
     "composite": true,
     "declaration": true,
     "declarationMap": true,
-    "lib": ["ES2020"],
+    "lib": ["ES2022", "WebWorker"],
     "module": "ESNext",
     "moduleResolution": "Node",
     "sourceMap": true,

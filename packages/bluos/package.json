@@ -1,6 +1,6 @@
 {
   "name": "bluos",
-  "version": "1.0.0-alpha.0",
+  "version": "1.0.0-alpha.1",
   "description": "A BluOS compatible API client library for TypeScript and JavaScript.",
   "license": "MIT",
   "private": false,
@@ -17,29 +17,27 @@
   "type": "module",
   "main": "lib/bluos.js",
   "scripts": {
-    "build": "tsc",
-    "prestart": "npm run build",
-    "start": "concurrently --kill-others-on-fail --handle-input --default-input-target 1 npm:start:typescript npm:start:nodemon",
-    "start:nodemon": "nodemon --watch lib lib/bluos.js",
-    "start:typescript": "tsc --watch --preserveWatchOutput"
+    "build": "tsc --build"
+  },
+  "peerDependenciesMeta": {
+    "@bluos/discovery": {
+      "optional": true
+    }
   },
   "sideEffects": false,
   "types": "lib/bluos.d.ts",
   "dependencies": {
-    "axios": "^1.2.4",
     "debug": "^4.3.4",
     "fast-xml-parser": "^4.0.15",
     "lodash.isequal": "^4.5.0",
-    "multicast-dns": "^7.2.5",
     "rxjs": "^7.8.0",
     "zod": "^3.20.2"
   },
+  "peerDependencies": {
+    "@bluos/discovery": "*"
+  },
   "devDependencies": {
     "@types/debug": "^4.1.7",
-    "@types/lodash.isequal": "^4.5.6",
-    "@types/multicast-dns": "^7.2.1",
-    "concurrently": "^7.0.0",
-    "nodemon": "^2.0.15",
-    "typescript": "^4.6.2"
+    "@types/lodash.isequal": "^4.5.6"
   }
 }

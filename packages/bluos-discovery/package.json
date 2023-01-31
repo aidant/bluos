@@ -1,0 +1,33 @@
+{
+  "name": "@bluos/discovery",
+  "version": "1.0.0-alpha.1",
+  "description": "Automatic Multicast DNS Service Discovery for BluOS.",
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "directory": "packages/bluos-discovery",
+    "type": "git",
+    "url": "https://github.com/aidant/bluos.git"
+  },
+  "bugs": {
+    "url": "https://github.com/aidant/bluos/issues"
+  },
+  "homepage": "https://github.com/aidant/bluos/tree/main/packages/bluos-discovery#readme",
+  "keywords": [],
+  "type": "module",
+  "main": "lib/bluos-discovery.js",
+  "scripts": {
+    "build": "tsc --build"
+  },
+  "sideEffects": false,
+  "types": "lib/bluos-discovery.d.ts",
+  "dependencies": {
+    "debug": "^4.3.4",
+    "multicast-dns": "^7.2.5",
+    "rxjs": "^7.8.0"
+  },
+  "devDependencies": {
+    "@types/debug": "^4.1.7",
+    "@types/multicast-dns": "^7.2.1"
+  }
+}
